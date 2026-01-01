@@ -38,19 +38,14 @@ with col:
         f"""
         <div style="
             border:1px solid #ccc;
-            border-radius:10px;
+            border-radius:8px;
             padding:6px;
-            height:95px;
-            position:relative;
+            height:90px;
+            font-size:14px;
+            text-align:center;
             background-color:{'#f0f8ff' if day == today else '#ffffff'};
         ">
-        <div style="
-            position:absolute;
-            top:6px;
-            left:8px;
-            font-size:13px;
-            color:#666;
-        ">{day.day}</div>
+        <b>{day.day}</b>
         """,
         unsafe_allow_html=True,
     )
@@ -73,4 +68,5 @@ with open(DATA_FILE, "w", encoding="utf-8") as f:
     json.dump(data, f, ensure_ascii=False, indent=2)
 
 st.caption("💾 自動儲存完成")
+
 
