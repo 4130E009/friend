@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import date, timedelta
 
 st.set_page_config(page_title="365 日填寫", layout="wide")
-st.title("🌱 365 天填寫表")
+st.title("存錢筒")
 
 YEAR = date.today().year
 start = date(YEAR, 1, 1)
@@ -19,7 +19,7 @@ if "data" not in st.session_state:
 
 df = st.session_state.data
 
-st.info("每格只能填 1~365，空白代表還沒寫。")
+st.info("money")
 
 edited = st.data_editor(
     df,
@@ -40,4 +40,5 @@ st.session_state.data = edited
 filled = edited["Value"].notna().sum()
 st.progress(filled / 365)
 st.write(f"已填 {filled} / 365 天")
+
 
