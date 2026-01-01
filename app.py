@@ -1,44 +1,66 @@
 import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
+import os
 
-st.set_page_config(page_title="365 日填寫", layout="wide")
-st.title("存錢筒")
+st.set_page_config(page_title="365 時間盒", layout="wide")
+st.title("🗓️ 365 天時間盒")
 
 YEAR = date.today().year
 start = date(YEAR, 1, 1)
+DATA_FILE = "data_365.csv"
 
-# 初始化資料
-if "data" not in st.session_state:
+def create_initial():
     days = [start + timedelta(days=i) for i in range(365)]
-    st.session_state.data = pd.DataFrame({
-        "Day": list(range(1, 366)),
+    return pd.DataFrame({
         "Date": [d.strftime("%m/%d") for d in days],
         "Value": [None] * 365
     })
 
-df = st.session_state.data
+if os.path.exists(DATA_FILE):
+    df = pd.read_csv(DATA_FILE)
+else:
+    df = create_initial()
 
-st.info("money")
+st.markdown("""
+<style>
+input[type="number"] {
+    width: 60px !important;
+    padding: 2px !important;
+}
+.box {
+    text-align: center;
+    font-size: 11px;
+    color: #666;
+}
+</style>
+""", unsafe_allow_html=True)
 
-edited = st.data_editor(
-    df,
-    use_container_width=True,
-    disabled=["Day", "Date"],
-    column_config={
-        "Value": st.column_config.NumberColumn(
-            "填寫數字",
-            min_value=1,
-            max_value=365,
-            step=1
-        )
-    }
-)
+cols_per_row = 73
+updated = []
 
-st.session_state.data = edited
+for r in range(5):
+    cols = st.columns(cols_per_row)
+    for c in range(cols_per_row):
+        idx = r * cols_per_row + c
+        if idx >= 365:
+            continue
 
-filled = edited["Value"].notna().sum()
+        with cols[c]:
+            st.markdown(f"<div class='box'>{df.loc[idx, 'Date']}</div>", unsafe_allow_html=True)
+            new_val = st.number_input(
+                label="",
+                min_value=1,
+                max_value=365,
+                step=1,
+                value=int(df.loc[idx, "Value"]) if pd.notna(df.loc[idx, "Value"]) else 1,
+                key=f"v_{idx}"
+            )
+            updated.append(new_val)
+
+df["Value"] = updated
+df.to_csv(DATA_FILE, index=False)
+
+filled = df["Value"].notna().sum()
 st.progress(filled / 365)
 st.write(f"已填 {filled} / 365 天")
-
-
