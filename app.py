@@ -1,66 +1,69 @@
 import streamlit as st
-import pandas as pd
-from datetime import date, timedelta
+import calendar
+from datetime import date
+import json
 import os
 
-st.set_page_config(page_title="365 時間盒", layout="wide")
-st.title("🗓️ 365 天時間盒")
+DATA_FILE = "data.json"
 
-YEAR = date.today().year
-start = date(YEAR, 1, 1)
-DATA_FILE = "data_365.csv"
-
-def create_initial():
-    days = [start + timedelta(days=i) for i in range(365)]
-    return pd.DataFrame({
-        "Date": [d.strftime("%m/%d") for d in days],
-        "Value": [None] * 365
-    })
-
+# 讀資料
 if os.path.exists(DATA_FILE):
-    df = pd.read_csv(DATA_FILE)
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
 else:
-    df = create_initial()
+    data = {}
 
-st.markdown("""
-<style>
-input[type="number"] {
-    width: 60px !important;
-    padding: 2px !important;
-}
-.box {
-    text-align: center;
-    font-size: 11px;
-    color: #666;
-}
-</style>
-""", unsafe_allow_html=True)
+st.set_page_config(page_title="存錢行事曆", layout="wide")
+st.title("📅 存錢行事曆")
 
-cols_per_row = 73
-updated = []
+today = date.today()
+year = st.selectbox("年份", range(2020, 2035), index=range(2020,2035).index(today.year))
+month = st.selectbox("月份", range(1, 13), index=today.month - 1)
 
-for r in range(5):
-    cols = st.columns(cols_per_row)
-    for c in range(cols_per_row):
-        idx = r * cols_per_row + c
-        if idx >= 365:
-            continue
+cal = calendar.Calendar()
+month_days = list(cal.itermonthdates(year, month))
 
-        with cols[c]:
-            st.markdown(f"<div class='box'>{df.loc[idx, 'Date']}</div>", unsafe_allow_html=True)
-            new_val = st.number_input(
-                label="",
-                min_value=1,
-                max_value=365,
-                step=1,
-                value=int(df.loc[idx, "Value"]) if pd.notna(df.loc[idx, "Value"]) else 1,
-                key=f"v_{idx}"
-            )
-            updated.append(new_val)
+# 每頁固定 5x7 = 35 格
+month_days = month_days[:35]
 
-df["Value"] = updated
-df.to_csv(DATA_FILE, index=False)
+cols = st.columns(7)
 
-filled = df["Value"].notna().sum()
-st.progress(filled / 365)
-st.write(f"已填 {filled} / 365 天")
+for i, day in enumerate(month_days):
+    col = cols[i % 7]
+
+    key = day.isoformat()
+
+    with col:
+        st.markdown(
+            f"""
+            <div style="
+                border:1px solid #ccc;
+                border-radius:8px;
+                padding:6px;
+                height:90px;
+                font-size:14px;
+                text-align:center;
+                background-color:{'#f0f8ff' if day == today else '#ffffff'};
+            ">
+            <b>{day.day}</b>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        val = data.get(key, "")
+        input_val = st.text_input("", val, key=key)
+
+        # 驗證
+        if input_val != "":
+            if input_val.isdigit() and 1 <= int(input_val) <= 365:
+                data[key] = input_val
+            else:
+                st.warning("只能輸入 1~365")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# 存檔
+with open(DATA_FILE, "w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=False, indent=2)
+
+st.caption("💾 自動儲存完成")
