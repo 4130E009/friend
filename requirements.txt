@@ -1,2 +1,2 @@
-streamlit
-pandas
+streamlit-gsheets
+st-annotated-text
