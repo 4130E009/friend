@@ -1,39 +1,37 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
 from datetime import date, timedelta
-import json
-import os
 import random
 
-DATA_FILE = "savings_data.json"
-
-# --- 1. 資料處理 ---
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except: return {}
-    return {}
-
-def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-if 'data' not in st.session_state:
-    st.session_state.data = load_data()
-
-# --- 2. 核心邏輯：檢查年份內已使用的金額 ---
-def get_used_amounts(year):
-    """回傳指定年份中已經存過的金額清單"""
-    used = []
-    for date_key, amount in st.session_state.data.items():
-        if date_key.startswith(str(year)):
-            used.append(int(amount))
-    return used
-
-# --- 3. 手機版樣式優化 ---
+# --- 1. 初始化連線 (改用 Google Sheets) ---
 st.set_page_config(page_title="365存錢管家", layout="centered")
 
+# 建立連線物件
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# 讀取資料函數 (加上 TTL=0 確保每次都抓最新資料)
+def load_data():
+    try:
+        # 讀取試算表，假設第一欄是 date, 第二欄是 amount
+        df = conn.read(ttl=0)
+        # 轉成字典格式方便我們原本的邏輯使用 {'2024-01-01': '100'}
+        # 確保資料型態正確
+        df['date'] = df['date'].astype(str)
+        df['amount'] = df['amount'].astype(str)
+        return dict(zip(df['date'], df['amount']))
+    except Exception as e:
+        # 如果試算表是空的或讀取失敗
+        return {}
+
+# 儲存資料函數 (寫回 Google Sheets)
+def save_data(data_dict):
+    # 把字典轉回 DataFrame
+    df_new = pd.DataFrame(list(data_dict.items()), columns=['date', 'amount'])
+    # 寫入 Google Sheets (這一步會真的存到雲端)
+    conn.update(data=df_new)
+
+# --- 2. 介面樣式優化 ---
 st.markdown("""
     <style>
     .stTextInput input { padding: 5px 10px !important; font-size: 16px !important; }
@@ -42,8 +40,19 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. 標題與統計 ---
-st.title("💰 365 存錢計畫")
+st.title("💰 365 存錢計畫 (雲端版)")
+
+# 載入資料
+if 'data' not in st.session_state:
+    st.session_state.data = load_data()
+
+# --- 3. 核心邏輯：檢查年份內已使用的金額 ---
+def get_used_amounts(year):
+    used = []
+    for date_key, amount in st.session_state.data.items():
+        if date_key.startswith(str(year)) and amount.strip().isdigit():
+            used.append(int(amount))
+    return used
 
 today = date.today()
 used_this_year = get_used_amounts(today.year)
@@ -51,7 +60,7 @@ total_saved = sum(used_this_year)
 
 st.metric("本年度累計金額", f"${total_saved:,}")
 
-# --- 5. 功能：隨機骰子 ---
+# --- 4. 功能：隨機骰子 ---
 with st.expander("🎲 今天不知道存多少？點我擲骰子", expanded=False):
     all_possible = set(range(1, 366))
     remaining = sorted(list(all_possible - set(used_this_year)))
@@ -71,7 +80,7 @@ with st.expander("🎲 今天不知道存多少？點我擲骰子", expanded=Fal
     else:
         st.success("恭喜！你已經完成今年的所有存錢目標了！")
 
-# --- 6. 日期區段選擇 ---
+# --- 5. 日期區段選擇 ---
 view_mode = st.radio("顯示模式", ["最近 7 天", "按月查看"], horizontal=True)
 
 display_days = []
@@ -85,7 +94,7 @@ else:
     cal = calendar.Calendar()
     display_days = [d for d in cal.itermonthdates(year, month) if d.month == month]
 
-# --- 7. 渲染列表與檢查邏輯 ---
+# --- 6. 渲染列表與檢查邏輯 ---
 st.divider()
 
 for day in display_days:
@@ -105,20 +114,21 @@ for day in display_days:
         input_val = st.text_input(label=f"in_{key}", value=current_val, key=f"v_{key}", placeholder="1~365", label_visibility="collapsed")
         
         if input_val != current_val:
-            if input_val == "":
-                st.session_state.data.pop(key, None)
-                save_data(st.session_state.data)
-                st.rerun()
-            elif input_val.isdigit():
-                val_int = int(input_val)
-                # 檢查 1-365 範圍
-                if not (1 <= val_int <= 365):
-                    st.error("請輸入 1~365")
-                # 檢查是否重複 (排除自己原本填的數字)
-                elif val_int in used_this_year and str(val_int) != current_val:
-                    st.error(f"數字 {val_int} 今年已經存過囉！")
-                else:
-                    st.session_state.data[key] = input_val
-                    save_data(st.session_state.data)
+            # 這裡增加一個載入中提示，因為連線 Google Sheets 需要約 1-2 秒
+            with st.spinner('正在同步到 Google 雲端...'):
+                if input_val == "":
+                    st.session_state.data.pop(key, None)
+                    save_data(st.session_state.data) # 存到雲端
                     st.rerun()
+                elif input_val.isdigit():
+                    val_int = int(input_val)
+                    if not (1 <= val_int <= 365):
+                        st.error("請輸入 1~365")
+                    elif val_int in used_this_year and str(val_int) != current_val:
+                        st.error(f"數字 {val_int} 今年已經存過囉！")
+                    else:
+                        st.session_state.data[key] = input_val
+                        save_data(st.session_state.data) # 存到雲端
+                        st.success("已儲存！")
+                        st.rerun()
     st.markdown("---")
