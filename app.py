@@ -87,7 +87,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("💰 365 存錢計畫 (雲端版)")
+st.title("💰 365 存錢計畫 ")
 
 # 初始化資料
 if 'data' not in st.session_state:
@@ -166,3 +166,4 @@ for day in display_days:
                         st.success("已儲存！")
                         st.rerun()
     st.markdown("---")
+
